@@ -1,4 +1,4 @@
-# account-producer-service
+# calculate-tax
 
 ## About
 Service responsible for:

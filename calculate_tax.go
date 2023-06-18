@@ -51,13 +51,8 @@ func main() {
 		}
 		if stop {
 			utils.Logger.Info("fim")
-			o := processOutput(operationsOutput)
-			j, err := json.Marshal(o)
-			if err != nil {
-				utils.Logger.Error("Error: %s", err.Error())
-			} else {
-				fmt.Println(string(j))
-			}
+			result := Result(operationsOutput)
+			fmt.Println(result)
 			break
 		}
 	}
@@ -174,8 +169,8 @@ func isLoss(operation models.OperationInput) bool {
 	return typeOperation == models.Sell && operation.UnitCost < weightedAverageSale
 }
 
-// processOutput format the output of the program
-func processOutput(operationsOutput []models.OperationOutput) []models.OperationOutputJson {
+// ProcessOutput format the output of the program
+func Result(operationsOutput []models.OperationOutput) string {
 	var operationsOutputJson []models.OperationOutputJson
 
 	for _, operation := range operationsOutput {
@@ -185,5 +180,10 @@ func processOutput(operationsOutput []models.OperationOutput) []models.Operation
 		operationsOutputJson = append(operationsOutputJson, ret)
 	}
 
-	return operationsOutputJson
+	j, err := json.Marshal(operationsOutputJson)
+	if err != nil {
+		utils.Logger.Error("Error: %s", err.Error())
+	}
+
+	return fmt.Sprintf("%s", string(j))
 }
