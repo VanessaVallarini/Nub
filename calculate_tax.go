@@ -118,7 +118,6 @@ func ProcessOperations(operations []models.OperationInput) []models.OperationOut
 // buy add the number of shares purchased
 func buy(operation models.OperationInput) {
 	currentAmountOfPurchases += operation.Quantity
-	fmt.Println("Comprar ações não paga imposto")
 	calculateWeightedAverage(operation)
 }
 
@@ -130,11 +129,9 @@ func sell(operation models.OperationInput) float64 {
 	g := 0.0
 	if isLoss {
 		l = float64(operation.Quantity) * operation.UnitCost
-		fmt.Printf("Prejuízo de R$ %v: não paga imposto", l)
 		loss += l
 	} else {
 		g = float64(operation.Quantity) * weightedAverageSale
-		fmt.Printf("Lucro de R$%v: Deve deduzir prejuízo de R$%v e paga 20 perc. de R$5000 em imposto (R$1000)", g, loss)
 		gain += g
 	}
 
