@@ -185,5 +185,5 @@ func Result(operationsOutput []models.OperationOutput) string {
 		utils.Logger.Error("Error: %s", err.Error())
 	}
 
-	return fmt.Sprintf("%s", string(j))
+	return string(j)
 }
