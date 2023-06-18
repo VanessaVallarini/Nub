@@ -13,20 +13,20 @@ import (
 
 var stop bool
 
-var qtdAtualDeCompras int64         //qtdAtualDeCompras
-var novamediaponderadavenda float64 //nova-media-ponderada-venda
-var lucro float64                   //lucro
-var prejuizo float64                // prejuízo
+var currentAmountOfPurchases int64
+var weightedAverageSale float64
+var gain float64
+var loss float64 // prejuízo
 
 func main() {
 
-	fmt.Println("Starting Application...")
+	utils.Logger.Info("Starting Application..")
 
 	var operationsOutput []models.OperationOutput
 	scn := bufio.NewScanner(os.Stdin)
 
 	for {
-		fmt.Println("Inform Operations:")
+		utils.Logger.Info("Inform Operations:")
 
 		for scn.Scan() {
 			input := scn.Text()
@@ -41,22 +41,7 @@ func main() {
 				break
 			}
 
-			for _, operation := range operations {
-				typeOperation, _ := models.ParseString(operation.Operation)
-				if typeOperation == models.Buy {
-					buy(operation)
-					o := models.OperationOutput{
-						Tax: 0.0,
-					}
-					operationsOutput = append(operationsOutput, o)
-				} else {
-					t := sell(operation)
-					o := models.OperationOutput{
-						Tax: t,
-					}
-					operationsOutput = append(operationsOutput, o)
-				}
-			}
+			operationsOutput = ProcessOperations(operations)
 
 		}
 
@@ -66,7 +51,13 @@ func main() {
 		}
 		if stop {
 			utils.Logger.Info("fim")
-			fmt.Println(operationsOutput)
+			o := processOutput(operationsOutput)
+			j, err := json.Marshal(o)
+			if err != nil {
+				utils.Logger.Error("Error: %s", err.Error())
+			} else {
+				fmt.Println(string(j))
+			}
 			break
 		}
 	}
@@ -90,13 +81,13 @@ func scanOperations(input string) ([]models.OperationInput, error) {
 	return operations, nil
 }
 
-// validateOperationType Returns true for valid operation types or false for invalid operation types
+// validateOperationType returns true for valid operation types or false for invalid operation types
 func validateOperationType(operations []models.OperationInput) bool {
 
 	for _, operation := range operations {
 		_, typeOperationIsValid := models.ParseString(operation.Operation)
 		if !typeOperationIsValid {
-			utils.Logger.Error("type operation is valid: %t", typeOperationIsValid)
+			utils.Logger.Error("type operation is valid: %t. Details: %s", typeOperationIsValid)
 			return false
 		}
 	}
@@ -104,33 +95,59 @@ func validateOperationType(operations []models.OperationInput) bool {
 	return true
 }
 
-func buy(operation models.OperationInput) {
-	qtdAtualDeCompras += operation.Quantity
-	calcularMediaPonderada(operation)
+// ProcessOperations returns a list of fees to be paid on shares bought or sold
+func ProcessOperations(operations []models.OperationInput) []models.OperationOutput {
+	var operationsOutput []models.OperationOutput
+
+	for _, operation := range operations {
+		typeOperation, _ := models.ParseString(operation.Operation)
+		if typeOperation == models.Buy {
+			buy(operation)
+			operationOutput := models.OperationOutput{
+				Tax: 0.0,
+			}
+			operationsOutput = append(operationsOutput, operationOutput)
+		} else {
+			tax := sell(operation)
+			oo := models.OperationOutput{
+				Tax: tax,
+			}
+			operationsOutput = append(operationsOutput, oo)
+		}
+	}
+
+	return operationsOutput
 }
 
+// buy add the number of shares purchased
+func buy(operation models.OperationInput) {
+	currentAmountOfPurchases += operation.Quantity
+	calculateWeightedAverage(operation)
+}
+
+// sell returns a list of fees to be paid on shares sold
 func sell(operation models.OperationInput) float64 {
 
-	qtdAtualDeCompras -= operation.Quantity
+	currentAmountOfPurchases -= operation.Quantity
 
-	isPrejuizo := isPrejuizo(operation)
+	isLoss := isLoss(operation)
 
-	p := 0.0
 	l := 0.0
-	if isPrejuizo {
-		p = float64(operation.Quantity) * novamediaponderadavenda
-		prejuizo += p
+	g := 0.0
+	if isLoss {
+		l = float64(operation.Quantity) * weightedAverageSale
+		loss += l
 	} else {
-		l = float64(operation.Quantity) * novamediaponderadavenda
-		lucro += l
+		g = float64(operation.Quantity) * weightedAverageSale
+		gain += g
 	}
 
-	if isPrejuizo && p < lucro {
-		lucro -= p
-		prejuizo -= p
+	if isLoss && l < gain {
+		gain -= l
+		loss -= l
 	}
 
-	if isPrejuizo {
+	if isLoss {
 		return 0.0
 	}
 
@@ -138,19 +155,35 @@ func sell(operation models.OperationInput) float64 {
 		return 0.0
 	}
 
-	return (l * 20) / 100
+	return (g * 20) / 100
 }
 
-func calcularMediaPonderada(operation models.OperationInput) {
-	if novamediaponderadavenda == 0 {
-		novamediaponderadavenda = operation.UnitCost
+// calculateWeightedAverage calculates the average purchase price of shares
+func calculateWeightedAverage(operation models.OperationInput) {
+	if weightedAverageSale == 0 {
+		weightedAverageSale = operation.UnitCost
 		return
 	}
 
-	novamediaponderadavenda += ((float64(qtdAtualDeCompras) * novamediaponderadavenda) + (float64(operation.Quantity) * operation.UnitCost)) / (float64(qtdAtualDeCompras) + float64(operation.Quantity))
+	weightedAverageSale += ((float64(currentAmountOfPurchases) * weightedAverageSale) + (float64(operation.Quantity) * operation.UnitCost)) / (float64(currentAmountOfPurchases) + float64(operation.Quantity))
 }
 
-func isPrejuizo(operation models.OperationInput) bool {
+// isLoss check if there was damage
+func isLoss(operation models.OperationInput) bool {
 	typeOperation, _ := models.ParseString(operation.Operation)
-	return typeOperation == models.Sell && operation.UnitCost < novamediaponderadavenda
+	return typeOperation == models.Sell && operation.UnitCost < weightedAverageSale
+}
+
+// processOutput format the output of the program
+func processOutput(operationsOutput []models.OperationOutput) []models.OperationOutputJson {
+	var operationsOutputJson []models.OperationOutputJson
+
+	for _, operation := range operationsOutput {
+		ret := models.OperationOutputJson{
+			Tax: fmt.Sprintf("%.2f", operation.Tax),
+		}
+		operationsOutputJson = append(operationsOutputJson, ret)
+	}
+
+	return operationsOutputJson
 }

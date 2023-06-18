@@ -9,3 +9,7 @@ type OperationInput struct {
 type OperationOutput struct {
 	Tax float64 `json:"tax"`
 }
+
+type OperationOutputJson struct {
+	Tax string `json:"tax"`
+}
