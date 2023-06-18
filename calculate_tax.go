@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 )
 
 var stop bool
@@ -117,29 +118,24 @@ func ProcessOperations(operations []models.OperationInput) []models.OperationOut
 // buy add the number of shares purchased
 func buy(operation models.OperationInput) {
 	currentAmountOfPurchases += operation.Quantity
+	fmt.Println("Comprar ações não paga imposto")
 	calculateWeightedAverage(operation)
 }
 
 // sell returns a list of fees to be paid on shares sold
 func sell(operation models.OperationInput) float64 {
-
-	currentAmountOfPurchases -= operation.Quantity
-
 	isLoss := isLoss(operation)
 
 	l := 0.0
 	g := 0.0
 	if isLoss {
-		l = float64(operation.Quantity) * weightedAverageSale
+		l = float64(operation.Quantity) * operation.UnitCost
+		fmt.Printf("Prejuízo de R$ %v: não paga imposto", l)
 		loss += l
 	} else {
 		g = float64(operation.Quantity) * weightedAverageSale
+		fmt.Printf("Lucro de R$%v: Deve deduzir prejuízo de R$%v e paga 20 perc. de R$5000 em imposto (R$1000)", g, loss)
 		gain += g
-	}
-
-	if isLoss && l < gain {
-		gain -= l
-		loss -= l
 	}
 
 	if isLoss {
@@ -150,7 +146,7 @@ func sell(operation models.OperationInput) float64 {
 		return 0.0
 	}
 
-	return (g * 20) / 100
+	return ((gain - loss) * 20) / 100
 }
 
 // calculateWeightedAverage calculates the average purchase price of shares
@@ -165,8 +161,7 @@ func calculateWeightedAverage(operation models.OperationInput) {
 
 // isLoss check if there was damage
 func isLoss(operation models.OperationInput) bool {
-	typeOperation, _ := models.ParseString(operation.Operation)
-	return typeOperation == models.Sell && operation.UnitCost < weightedAverageSale
+	return operation.UnitCost < weightedAverageSale
 }
 
 // ProcessOutput format the output of the program
@@ -185,5 +180,5 @@ func Result(operationsOutput []models.OperationOutput) string {
 		utils.Logger.Error("Error: %s", err.Error())
 	}
 
-	return string(j)
+	return strings.Trim(string(j), " ")
 }
